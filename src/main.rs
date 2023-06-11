@@ -4,7 +4,10 @@ use std::{io, time::Duration};
 
 use crossterm::{
     cursor,
-    event::{self, EnableMouseCapture, Event, KeyCode, MouseButton, MouseEvent, MouseEventKind},
+    event::{
+        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, MouseButton, MouseEvent,
+        MouseEventKind,
+    },
     execute, queue,
     style::{self, Stylize},
     terminal,
@@ -21,6 +24,37 @@ type Coord = (u16, u16);
 fn main() -> io::Result<()> {
     let mut stdout = io::stdout();
     run(&mut stdout)
+}
+
+fn run<W: io::Write>(write: &mut W) -> io::Result<()> {
+    execute!(write, terminal::EnterAlternateScreen, EnableMouseCapture)?;
+    terminal::enable_raw_mode()?;
+
+    let mut app = App::new();
+    let mut need_redraw = true;
+
+    'outer: loop {
+        if need_redraw {
+            app.draw(write)?;
+        }
+
+        match app.handle_input()? {
+            AppAction::NeedRedraw(b) => need_redraw = b,
+            AppAction::Quit => break 'outer,
+        }
+
+        need_redraw |= app.update();
+    }
+
+    execute!(
+        write,
+        style::ResetColor,
+        cursor::Show,
+        DisableMouseCapture,
+        terminal::LeaveAlternateScreen,
+    )?;
+
+    terminal::disable_raw_mode()
 }
 
 enum AppAction {
@@ -246,34 +280,4 @@ fn to_point_coord(row: u16, column: u16) -> Coord {
     } else {
         (column, row)
     }
-}
-
-fn run<W: io::Write>(write: &mut W) -> io::Result<()> {
-    execute!(write, terminal::EnterAlternateScreen, EnableMouseCapture)?;
-    terminal::enable_raw_mode()?;
-
-    let mut app = App::new();
-    let mut need_redraw = true;
-
-    'outer: loop {
-        if need_redraw {
-            app.draw(write)?;
-        }
-
-        match app.handle_input()? {
-            AppAction::NeedRedraw(b) => need_redraw = b,
-            AppAction::Quit => break 'outer,
-        }
-
-        need_redraw |= app.update();
-    }
-
-    execute!(
-        write,
-        style::ResetColor,
-        cursor::Show,
-        terminal::LeaveAlternateScreen,
-    )?;
-
-    terminal::disable_raw_mode()
 }
